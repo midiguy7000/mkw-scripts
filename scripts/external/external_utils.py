@@ -185,4 +185,40 @@ def load_external_setting(config_file, setting_name):
     if config["SETTINGS"].get(setting_name):
         return config["SETTINGS"].get(setting_name)
     return None
-   
+
+class ConfigFile(configparser.ConfigParser):
+    """A modified version of configparser.ConfigParser that is easier to use"""
+    def __init__(self, file_path: str, read_mode: bool):
+        super().__init__()
+        self.file_path = file_path
+        self.read_mode = read_mode
+        if not read_mode:
+            with open(self.file_path, 'w') as file:
+                file.close()
+        else:
+            self.read(self.file_path, encoding='utf-8')
+
+    def __str__(self):
+        return self.file_path
+
+    def read_variable(self, section: str, variable_name: str) -> str:
+        """Returns the value of a variable with a given section and variable name (for use in read mode only)"""
+        if not self.read_mode:
+            return None
+        else:
+            return self[section][variable_name]
+
+    def create_section(self, section_name: str) -> None:
+        """Creates a section with a given name (for use in write mode only)"""
+        self[section_name] = {}
+
+    def create_variable(self, variable, section: str) -> None:
+        """Creates a variable with a variable name, value, and section (for use in write mode only)
+        \n Format: create_variable((variable name, variable value), section)"""
+        self[section][variable[0]] = variable[1]
+
+    def write_to_file(self) -> None:
+        """Writes all created sections and variables to file_path (for use in write mode only)"""
+        with open(self.file_path, 'w') as file:
+            self.write(file)
+            file.close()

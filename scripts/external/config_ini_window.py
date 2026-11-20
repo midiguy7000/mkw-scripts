@@ -25,26 +25,12 @@ EXTRA = 'Extra Display (optional, advanced)'
 SAVE = 'Save Config'
 MKW_YELLOW = 'F2E622FF'
 PURE_WHITE = 'FFFFFFFF'
+ENCODING_OPTIONS = 'Encoding options'
+AUDIO_OPTIONS = 'Audio options'
+INFO_DISPLAY = 'Infodisplay'
+INPUTDISPLAY = 'Input display'
+AUTHORDISPLAY = 'Author display'
 
-
-
-class ConfigFile(configparser.ConfigParser):
-    def __init__(self, file_path: str):
-        super().__init__()
-        self.file_path = file_path
-        with open(self.file_path, 'w') as file:
-            file.close()
-
-    def create_section(self, section_name: str) -> None:
-        self[section_name] = {}
-
-    def create_variable(self, variable: tuple[str], section: str) -> None:
-        self[section][variable[0]] = variable[1]
-
-    def write_to_file(self) -> None:
-        with open(self.file_path, 'w') as file:
-            self.write(file)
-            file.close()
 
 class Window(ctk.CTk):
     def __init__(self):
@@ -56,6 +42,13 @@ class Window(ctk.CTk):
 
         self.mainmenu: MainMenu | None = MainMenu(master=self)
         self.mainmenu.grid(row=0, column=0)
+
+        self.protocol('WM_DELETE_WINDOW', self.close_window)
+
+    def close_window(self):
+        global shm_auto_cancel
+        shm_auto_cancel.write_text('cancel_now')
+        sys.exit()
 
 class MainMenu(ctk.CTkTabview):
     def __init__(self, master):
@@ -172,8 +165,11 @@ class MainMenu(ctk.CTkTabview):
         clear_btn = ctk.CTkButton(master=self.tab(SAVE), text='Clear all custom positions', fg_color='#FF0000', hover_color='#9B0000', command=self.unset_flag)
         clear_btn.grid(row=0, column=0, pady=10, sticky='ew')
 
+        self.import_button = ctk.CTkButton(master=self.tab(SAVE), text='Import config file', command=lambda: self.import_config())
+        self.import_button.grid(row=1, column=0, pady=10, sticky='ew')
+
         self.save_btn = ctk.CTkButton(master=self.tab(SAVE), text='Save changes', command=self.save_changes)
-        self.save_btn.grid(row=1, column=0, pady=10, sticky='ew')
+        self.save_btn.grid(row=2, column=0, pady=10, sticky='ew')
 
         self.new_author_data: None | list[None | tuple] = None
 
@@ -240,7 +236,7 @@ class MainMenu(ctk.CTkTabview):
                 start_frame = author[2]
                 end_frame = author[3]
             self.new_author_data.append((author[0], start_frame, end_frame))
-        self.name_display_file = open(open_txt_file(), 'w')
+        self.name_display_file = open(f'{ROOTDIR}\\authors.txt', 'w')
         with self.name_display_file as file:
             for author in self.new_author_data:
                 loop_num += 1
@@ -263,10 +259,190 @@ class MainMenu(ctk.CTkTabview):
         text.save(f'{UTILSDIR}\\name_display.png')
         return self.custom_pos(f'{UTILSDIR}\\name_display', xsub=-12, ysub=-8)
         
+    def import_config(self):
+        file_path = open_file()
+        if file_path[-3] + file_path[-2] + file_path[-1] != 'ini':
+            return None
+        config = ex.ConfigFile(file_path, True)
+
+        #Encoding Options
+        try: 
+            style = config.read_variable(ENCODING_OPTIONS, 'encode_style')
+        except KeyError:
+            style = 'normal'
+        if style in {'yt', 'youtube'}:
+            self.encode_style.set('YouTube')
+        elif style == 'discord':
+            self.encode_style.set('Discord')
+        else:
+            self.encode_style.set('Standard')
+
+        try:
+            preset = config.read_variable(ENCODING_OPTIONS, 'preset')
+        except KeyError:
+            preset = 'medium'
+        self.preset.set(preset)
+
+        self.threads.delete(0, 'end')
+        try:
+            threads = config.read_variable(ENCODING_OPTIONS, 'threads')
+        except KeyError:
+            threads = '8'
+        self.threads.insert(0, threads)
+
+        try:
+            resolution = config.read_variable(ENCODING_OPTIONS, 'resize_resolution')
+        except KeyError:
+            resolution = '1080'
+        if resolution in {'1080', '720', '1440'}:
+            resolution += 'p'
+        elif resolution == '2160':
+            resolution = '4K UHD'
+        else:
+            resolution = '1080'
+        self.resolution.set(resolution)
+
+        try:
+            scaling = config.read_variable(ENCODING_OPTIONS, 'scaling_option')
+        except KeyError:
+            scaling = 'bilinear'
+        if scaling in {'lanczos', 'bicubic', 'bilinear'}:
+            scaling = scaling.capitalize()
+        else:
+            scaling = 'bilinear'
+        self.scaling.set(scaling)
+
+        self.output.delete(0, 'end')
+        self.fadein_video.delete(0, 'end')
+        self.fadeout_video.delete(0, 'end')
+        try:
+            output_filename = config.read_variable(ENCODING_OPTIONS, 'output_filename')
+        except KeyError:
+            output_filename = 'output.mp4'
+        self.output.insert(0, output_filename)
+        try:
+            video_fade_in = config.read_variable(ENCODING_OPTIONS, 'video_fade_in')
+        except KeyError:
+            video_fade_in = '0'
+        self.fadein_video.insert(0, video_fade_in)
+        try:
+            video_fade_out = config.read_variable(ENCODING_OPTIONS, 'video_fade_out')
+        except KeyError:
+            video_fade_out = '0'
+        self.fadeout_video.insert(0, video_fade_out)
+
+        #Audio_options
+        try:
+            play_audio = config.read_variable(AUDIO_OPTIONS, 'audiodump_volume')
+        except KeyError:
+            play_audio = 1
+        if float(play_audio) >= 0.0:
+            self.play_audio.select()
+
+        self.fadein_audio.delete(0, 'end')
+        self.fadeout_audio.delete(0, 'end')
+        try:
+            audio_fade_in = config.read_variable(AUDIO_OPTIONS, 'fade_in')
+        except KeyError:
+            audio_fade_in = '0'
+        self.fadein_audio.insert(0, audio_fade_in)
+        try:
+            audio_fade_out = config.read_variable(AUDIO_OPTIONS, 'fade_out')
+        except KeyError:
+            audio_fade_out = '0'
+        self.fadeout_audio.insert(0, audio_fade_out)
+        
+        #IV/EV Display
+        try:
+            show_ivev_disp = config.read_variable(INFO_DISPLAY, 'show_infodisplay')
+        except KeyError:
+            show_ivev_disp = 'False'
+        if show_ivev_disp not in {'True', 'False'}:
+            show_ivev_disp = 'False'
+
+        if show_ivev_disp == 'True':
+            self.show_infodisplay.select()
+
+        try:
+            show_ev = config.read_variable(INFO_DISPLAY, 'show_ev_xyz')
+        except KeyError:
+            show_ev = 'False'
+        try:
+            show_iv = config.read_variable(INFO_DISPLAY, 'show_iv_xyz')
+        except KeyError:
+            show_iv = 'False'
+
+        if show_ev not in {'True', 'False'}:
+            show_ev = 'False'
+        if show_iv not in {'True', 'False'}:
+            show_iv = 'False'
+
+        if show_ev == 'True' and show_ev == 'True':
+            self.type_of_info.set('IV & EV')
+        elif show_ev == 'False' and show_iv == 'True':
+            self.type_of_info.set('IV only')
+        elif show_ev == 'True' and show_iv == 'False':
+            self.type_of_info.set('EV only')
+        else:
+            self.type_of_info.set('Display Type')
+
+        #Speedometer
+        try:
+            show_speedo = config.read_variable(INFO_DISPLAY, 'pretty_speedometer_type')
+        except KeyError:
+            show_speedo = 'none'
+        if show_speedo in {'iv', 'ev', 'xyz', 'xz'}:
+            speedo_type = show_speedo.upper()
+            show_speedo = True
+        else:
+            speedo_type = None
+            show_speedo = False
+
+        if show_speedo:
+            self.show_speedometer.select()
+            self.speedometer_type.set(speedo_type)
+
+        #Input display
+        try:
+            show_input_disp = config.read_variable(INPUTDISPLAY, 'show_input_display')
+        except KeyError:
+            show_input_disp = 'False'
+        if show_input_disp == 'True':
+            self.show_input_display.select()
+        try:
+            show_stick_text = config.read_variable(INPUTDISPLAY, 'draw_stick_text')
+        except KeyError:
+            show_stick_text = 'False'
+        if show_stick_text == 'True':
+            self.show_stick_display.select()
+
+        #Name display
+        try:
+            show_name_disp = config.read_variable(AUTHORDISPLAY, 'show_author_display')
+        except KeyError:
+            show_name_disp = 'False'
+        if show_name_disp == 'True':
+            self.show_stick_display.select()
+
+        #Speed display
+        try:
+            show_speed_disp = config.read_variable('Speed display', 'show_speed_display')
+        except KeyError:
+            show_speed_disp = 'False'
+        if show_speed_disp == 'True':
+            self.show_speed_display.select()
+
+        #Extra display
+        try:
+            show_extra_disp = config.read_variable('Extra display', 'show_extra_display')
+        except KeyError:
+            show_extra_disp = 'False'
+        if show_extra_disp == 'True':
+            self.show_extra_display.select()
         
     def save_changes(self) -> None:
-        file_path = open_file()
-        config = ConfigFile(file_path)
+        file_path = f'{ROOTDIR}\\config.ini'
+        config = ex.ConfigFile(file_path, False)
 
         #Encoding options
         config.create_section('Encoding options')
@@ -604,10 +780,12 @@ class MainMenu(ctk.CTkTabview):
         sys.exit()     
 
 def open_file() -> str:
-    return f'{ROOTDIR}\\config.ini'
-
-def open_txt_file() -> str:
-    return f'{ROOTDIR}\\authors.txt'
+    root = filedialog.askopenfilename(
+        title='Open config.ini',
+        defaultextension='.ini',
+        filetypes=[('Configuration settings', 'ini')]
+    )
+    return root
 
 if __name__ == '__main__':
     window = Window()
